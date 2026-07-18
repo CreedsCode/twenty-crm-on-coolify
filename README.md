@@ -47,11 +47,13 @@ This repository provides a **Coolify-ready `twenty-docker-compose.yml`** that le
 🧱 Stack
 --------
 
--   **Twenty CRM** -- `twentycrm/twenty`
+All images are pinned to exact versions for reproducible deploys (last reviewed 2026-07-18):
 
--   **PostgreSQL** -- `postgres:16-alpine`
+-   **Twenty CRM** -- `twentycrm/twenty:v2.22.0`
 
--   **Redis** -- `redis:7-alpine`
+-   **PostgreSQL** -- `postgres:16.14-alpine`
+
+-   **Redis** -- `redis:7.4.9-alpine`
 
 -   **Reverse Proxy** -- Traefik (via Coolify)
 
@@ -107,9 +109,19 @@ In **Coolify → Configure → Environment Variables**, set at minimum:
 
 ```
 SERVER_URL=https://crm.yourdomain.com
-APP_SECRET=replace_me_with_a_random_string_minimum_32_characters
+APP_SECRET=<openssl rand -base64 32>
+ENCRYPTION_KEY=<openssl rand -base64 32>
+PG_DATABASE_PASSWORD=<strong password>
 
 ```
+
+Generate each secret with `openssl rand -base64 32` (use different values for
+`APP_SECRET` and `ENCRYPTION_KEY`).
+
+> ⚠️ **Back up `ENCRYPTION_KEY` somewhere safe.** Since Twenty v2.5 it encrypts
+> secrets stored in the database (API keys, OAuth tokens, etc.). If you lose it,
+> those secrets are unrecoverable. `FALLBACK_ENCRYPTION_KEY` is only needed
+> during key rotation — leave it unset otherwise.
 
 #### Optional (Email)
 
@@ -151,6 +163,49 @@ Initial startup may take a few minutes while:
 -   Worker starts
 
 
+🔄 Upgrading
+------------
+
+Twenty releases fast (roughly weekly) and upgrades run database migrations, so
+treat them as deliberate maintenance — never automatic. The images here are
+pinned so nothing upgrades behind your back; `latest` is intentionally not used.
+
+**Procedure:**
+
+1.  **Read the release notes** for every version between yours and the target:
+    <https://github.com/twentyhq/twenty/releases>. Watch for entries marked
+    **[Breaking change]**.
+
+2.  **Back up the database** (from the Coolify server, container name may differ):
+
+    ```
+    docker exec -t <db-container> pg_dumpall -U postgres > twenty-backup-$(date +%F).sql
+    ```
+
+    Migrations are one-way — you cannot roll back to an older image after they
+    run, so a restore from backup is your only downgrade path.
+
+3.  **Bump the version**: set `TAG=v2.x.y` in Coolify's environment variables
+    (or edit the default in the compose file), using an exact tag — not `latest`.
+    Since v1.22 you may jump several versions at once; the server applies all
+    intermediate migrations automatically on startup.
+
+4.  **Redeploy and watch the server logs.** First boot after an upgrade can take
+    a while (migrations + occasional backfills). Don't interrupt it.
+
+5.  **Verify**: log in, check `/healthz`, confirm background jobs run (worker
+    container healthy).
+
+Prefer upgrading to a release that has been out for a few days over the
+just-published one — patch releases (e.g. `v2.20.0` → `v2.20.2`) often follow
+within days. Upstream guide:
+<https://docs.twenty.com/developers/self-hosting/upgrade-guide>
+
+Postgres and Redis are pinned too. Patch bumps (e.g. `16.14` → `16.15`) are
+safe to apply anytime; a Postgres **major** upgrade (16 → 17) requires a
+dump/restore and should be done separately from any Twenty upgrade.
+
+
 🩺 Health Checks
 ----------------
 
@@ -167,7 +222,7 @@ Coolify uses this to determine container readiness.
 🔐 Security Notes
 -----------------
 
--   **Change `APP_SECRET`** before production use
+-   **Change `APP_SECRET` and `ENCRYPTION_KEY`** before production use, and keep `ENCRYPTION_KEY` backed up
 
 -   Use HTTPS only (handled automatically by Coolify)
 

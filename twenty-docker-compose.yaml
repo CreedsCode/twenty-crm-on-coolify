@@ -1,9 +1,17 @@
-# Documentation: https://twenty.com/developers/section/self-hosting
+# Documentation: https://docs.twenty.com/developers/self-hosting/upgrade-guide
+#
+# All images are pinned to exact versions so deploys are reproducible.
+# To upgrade Twenty: back up the database first, then bump TAG (or its
+# default below) to the next release tag and redeploy. See README "Upgrading".
+# Pinned versions (last reviewed 2026-07-18):
+#   twentycrm/twenty : v2.22.0  (https://github.com/twentyhq/twenty/releases)
+#   postgres         : 16.14-alpine  (stay on 16.x — a major bump needs a dump/restore)
+#   redis            : 7.4.9-alpine
 
 name: twenty
 services:
   server:
-    image: 'twentycrm/twenty:${TAG:-latest}'
+    image: 'twentycrm/twenty:${TAG:-v2.22.0}'
     volumes:
       - '${COOLIFY_VOLUME_SERVER}:/app/packages/twenty-server/.local-storage'
     environment:
@@ -19,6 +27,8 @@ services:
       - 'STORAGE_S3_NAME=${STORAGE_S3_NAME:-}'
       - 'STORAGE_S3_ENDPOINT=${STORAGE_S3_ENDPOINT:-}'
       - 'APP_SECRET=${APP_SECRET:-replace_me_with_a_random_string_minimum_32_characters}'
+      - 'ENCRYPTION_KEY=${ENCRYPTION_KEY:-replace_me_generate_with_openssl_rand_base64_32}'
+      - 'FALLBACK_ENCRYPTION_KEY=${FALLBACK_ENCRYPTION_KEY:-}'
       - 'MESSAGING_PROVIDER_GMAIL_ENABLED=${MESSAGING_PROVIDER_GMAIL_ENABLED:-false}'
       - 'CALENDAR_PROVIDER_GOOGLE_ENABLED=${CALENDAR_PROVIDER_GOOGLE_ENABLED:-false}'
       - 'AUTH_GOOGLE_CLIENT_ID=${AUTH_GOOGLE_CLIENT_ID:-}'
@@ -68,7 +78,7 @@ services:
       - traefik.http.routers.twenty-server-https.tls.certresolver=letsencrypt
       - traefik.http.services.twenty-server.loadbalancer.server.port=3000
   worker:
-    image: 'twentycrm/twenty:${TAG:-latest}'
+    image: 'twentycrm/twenty:${TAG:-v2.22.0}'
     volumes:
       - '${COOLIFY_VOLUME_SERVER}:/app/packages/twenty-server/.local-storage'
     command:
@@ -85,6 +95,8 @@ services:
       - 'STORAGE_S3_NAME=${STORAGE_S3_NAME:-}'
       - 'STORAGE_S3_ENDPOINT=${STORAGE_S3_ENDPOINT:-}'
       - 'APP_SECRET=${APP_SECRET:-replace_me_with_a_random_string_minimum_32_characters}'
+      - 'ENCRYPTION_KEY=${ENCRYPTION_KEY:-replace_me_generate_with_openssl_rand_base64_32}'
+      - 'FALLBACK_ENCRYPTION_KEY=${FALLBACK_ENCRYPTION_KEY:-}'
       - 'MESSAGING_PROVIDER_GMAIL_ENABLED=${MESSAGING_PROVIDER_GMAIL_ENABLED:-false}'
       - 'CALENDAR_PROVIDER_GOOGLE_ENABLED=${CALENDAR_PROVIDER_GOOGLE_ENABLED:-false}'
       - 'AUTH_GOOGLE_CLIENT_ID=${AUTH_GOOGLE_CLIENT_ID:-}'
@@ -124,7 +136,7 @@ services:
       start_period: 30s
     restart: always
   db:
-    image: 'postgres:16-alpine'
+    image: 'postgres:16.14-alpine'
     volumes:
       - '${COOLIFY_VOLUME_DB}:/var/lib/postgresql/data'
     environment:
@@ -141,7 +153,7 @@ services:
       start_period: 20s
     restart: always
   redis:
-    image: 'redis:7-alpine'
+    image: 'redis:7.4.9-alpine'
     command:
       - redis-server
       - '--maxmemory-policy'
